@@ -6,7 +6,7 @@ unsigned long previousMillis = 0;    // Stores the last time distance was printe
 const unsigned long interval = 200;  // Interval in milliseconds (e.g., 100ms)
 
 void setup() {
-  Serial.begin(9600);
+  Serial.begin(115200);
   pinMode(triggerPin, OUTPUT);
   pinMode(echoPin, INPUT);
 }

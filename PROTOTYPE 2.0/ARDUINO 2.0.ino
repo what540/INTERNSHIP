@@ -131,7 +131,4 @@ void loop() {
 
     previousMillis = currentMillis;
   }
-
-  // Small delay to stabilize readings
-  delay(1000);
 }

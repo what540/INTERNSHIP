@@ -6,9 +6,9 @@ from collections import deque
 import random
 
 # Configuration Constants
-arduino_PORT = 'COM9'
-arduino_BAUD_RATE = 115200
-RS232_PORT = 'COM12'
+ULTRASONIC_PORT = 'COM9'
+ULTRASONIC_BAUD_RATE = 9600
+RS232_PORT = 'COM10'
 RS232_BAUD_RATE = 38400
 RS232_TIMEOUT = 1
 
@@ -24,6 +24,7 @@ motor_interval = 1.5  # Default interval for motor movements
 motor_move_count = 0
 last_frequency_update_time = time.time()
 
+
 # Serial Connections
 def connect_serial(port, baud_rate, timeout=None):
     """Connect to a serial port."""
@@ -33,46 +34,43 @@ def connect_serial(port, baud_rate, timeout=None):
         print(f"Error connecting to {port}: {e}")
         return None
 
-arduinoData = connect_serial(arduino_PORT, arduino_BAUD_RATE)
+
+ultrasonic_arduino = connect_serial(ULTRASONIC_PORT, ULTRASONIC_BAUD_RATE)
 motor_serial = connect_serial(RS232_PORT, RS232_BAUD_RATE, RS232_TIMEOUT)
-time.sleep(1) # Delay
+
 
 # Ultrasonic Sensor Functions
 def read_distance():
     """Continuously read distance values from the ultrasonic sensor."""
     global measuring, previous_distance, last_range_update_time
 
-    while True:
-        if arduinoData.in_waiting > 0:  # Look for any data waiting
+    while measuring and ultrasonic_arduino:
+        if ultrasonic_arduino.in_waiting > 0:
             try:
-                # Read and parse the incoming data
-                data = arduinoData.readline().decode('utf-8').strip().split(",")
-                if len(data) == 3:
-                    ultra_distance = int(data[0])
-                    laser_distance = float(data[0])
-                    gyro = float(data[0])
-
-                    # Update the distance label
-                    root.after(0, update_distance_label, ultra_distance)
-                    distance_values.append(ultra_distance)
+                data = ultrasonic_arduino.readline().decode('utf-8').strip()
+                if data.isdigit():
+                    distance = int(data)
+                    root.after(0, update_distance_label, distance)
+                    distance_values.append(distance)
 
                     current_time = time.time()
                     if previous_distance is not None:
                         status = "OK!!"
-                        if ultra_distance > 10:
+                        if distance > 10:
                             status = "Hogging!"
-                        elif ultra_distance < 10:
+                        elif distance < 10:
                             status = "Sagging!"
                         root.after(0, update_hogging_status, status)
 
                     if current_time - last_range_update_time >= 1:
-                        root.after(0, calculate_and_update_range, previous_distance, ultra_distance)
+                        root.after(0, calculate_and_update_range, previous_distance, distance)
                         last_range_update_time = current_time
                         distance_values.clear()
 
-                    previous_distance = ultra_distance
+                    previous_distance = distance
             except Exception as e:
                 print(f"Error reading distance: {e}")
+
 
 def calculate_and_update_range(previous_value, current_value):
     """Calculate and update the range difference between previous and current values."""
@@ -81,13 +79,14 @@ def calculate_and_update_range(previous_value, current_value):
     previous_value_label_value.config(text=f"{previous_value} cm")
     current_value_label_value.config(text=f"{current_value} cm")
 
+
 def update_distance_label(distance):
-    """Update the distance label."""
     distance_label_value.config(text=f"{distance} cm")
 
+
 def update_hogging_status(status):
-    """Update the hogging status label."""
     hogging_label_value.config(text=status)
+
 
 def start_measuring():
     """Start ultrasonic distance measurement."""
@@ -96,10 +95,12 @@ def start_measuring():
         measuring = True
         threading.Thread(target=read_distance, daemon=True).start()
 
+
 def stop_measuring():
     """Stop ultrasonic distance measurement."""
     global measuring
     measuring = False
+
 
 # Motor Control Functions
 def send_ascii_command(ser, command):
@@ -112,6 +113,7 @@ def send_ascii_command(ser, command):
             print(f"Motor Response: {response}")
     except Exception as e:
         print(f"Error sending motor command: {e}")
+
 
 def move_motor_to_position():
     """Move the motor to random positions at specified intervals."""
@@ -131,6 +133,7 @@ def move_motor_to_position():
             print(f"Motor Error: {e}")
             break
 
+
 def start_motor():
     """Start motor control."""
     global motor_running, last_frequency_update_time, motor_move_count
@@ -141,10 +144,12 @@ def start_motor():
         threading.Thread(target=move_motor_to_position, daemon=True).start()
         threading.Thread(target=update_motor_frequency, daemon=True).start()
 
+
 def stop_motor():
     """Stop motor control."""
     global motor_running
     motor_running = False
+
 
 def update_motor_frequency():
     """Update motor movement frequency based on a 30-second window."""
@@ -158,14 +163,15 @@ def update_motor_frequency():
             motor_move_count = 0
             last_frequency_update_time = current_time
 
+
 def update_frequency_label(frequency):
-    """Update frequency label."""
     frequency_label_value.config(text=f"{frequency:.2f} moves/min")
+
 
 # GUI Setup
 root = tk.Tk()
 root.title("Ultrasonic Sensor & Motor Control")
-root.geometry("1000x1000")
+root.geometry("600x600")
 
 # Create GUI Labels and Buttons
 frame = tk.Frame(root)

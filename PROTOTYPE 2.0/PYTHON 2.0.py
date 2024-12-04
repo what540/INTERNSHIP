@@ -18,9 +18,9 @@ motor_move_count = 0  # Counter to keep track of motor movements
 last_frequency_update_time = time.time()  # Timestamp of the last frequency update
 # Sensor Variables
 measuring = False
-sensor_values = {"ultrasonic": deque(), "laser": deque()}
+sensor_values = {"ultrasonic": deque(), "laser": deque(), "gyro": deque()}
 previous_values = {"ultrasonic": None, "laser": None}
-last_update_times = {"ultrasonic": time.time(), "laser": time.time()}
+last_update_times = {"ultrasonic": time.time(), "laser": time.time(), "gyro": time.time()}
 
 # Serial Connections
 def connect_serial(port, baud_rate, timeout=None):
@@ -40,23 +40,34 @@ def read_sensor_data():
     """Read data from the Arduino and update GUI labels."""
     global measuring, previous_values, last_update_times
 
-    while measuring:
-        if arduinoData and arduinoData.in_waiting > 0:
+    while measuring and arduinoData:
+        if arduinoData.in_waiting > 0:
             try:
                 data = arduinoData.readline().decode('utf-8').strip().split(",")
                 if len(data) == 3:
                     laser_distance = float(data[0])
                     ultra_distance = int(data[1])
+                    gyro = float(data[2])
                     # Update Ultrasonic Sensor Data
                     update_sensor_data("ultrasonic", ultra_distance)
 
                     # Update Laser Sensor Data
                     update_sensor_data("laser", laser_distance)
 
+                    update_gyro_label(gyro)  # Update the gyro value separately
+
+
             except Exception as e:
                 print(f"Error reading sensor data: {e}")
 
+def update_gyro_label(gyro):
+    """Update the gyro label with the current gyro value."""
+    gyro_label_value.config(text=f"{gyro} deg/s")
+
+
 def update_sensor_data(sensor_type, distance):
+    # Update range difference every second
+    current_time = time.time()
     """Update sensor data and GUI labels."""
     global previous_values, last_update_times
 
@@ -77,8 +88,7 @@ def update_sensor_data(sensor_type, distance):
             status = "Sagging!"
     root.after(0, update_hogging_status, status, sensor_type)
 
-    # Update range difference every second
-    current_time = time.time()
+
     if current_time - last_update_times[sensor_type] >= 1:
         previous_value = previous_values[sensor_type]
         root.after(0, calculate_and_update_range, previous_value, distance, sensor_type)
@@ -250,7 +260,7 @@ laser_current_value_label_value.grid(row=4, column=0, pady=5)
 gyro_frame = tk.LabelFrame(main_container, text="Gyro Sensor", padx=10, pady=10)
 gyro_frame.grid(row=0, column=2, padx=10)
 
-gyro_label_value = tk.Label(gyro_frame, text="0 mm", font=("Arial", 20))
+gyro_label_value = tk.Label(gyro_frame, text="Gyro: 0.0 deg/s", font=("Arial", 20))
 gyro_label_value.grid(row=0, column=0, pady=5)
 
 
@@ -284,4 +294,3 @@ stop_motor_button.pack(side="left", padx=10)
 
 
 root.mainloop()
-5

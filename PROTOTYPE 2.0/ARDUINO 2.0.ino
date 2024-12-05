@@ -20,7 +20,7 @@ Adafruit_MPU6050 mpu;
 
 // Timing variables
 unsigned long previousMillis = 0;
-const unsigned long interval = 200;  // Update interval for OLED
+const unsigned long interval = 1000;  // Update interval for OLED
 
 void setup() {
   // Initialize serial communication
@@ -67,11 +67,11 @@ void loop() {
   // --- VL53L0X Distance Measurement ---
   VL53L0X_RangingMeasurementData_t measure;
   lox.rangingTest(&measure, false);  // Perform measurement
-  float laser;
+  int laser;
     if (measure.RangeStatus != 4)  // phase failures have incorrect data
     laser = measure.RangeMilliMeter;
   else
-    laser = 0;
+    laser =9999;
 
   // --- HC-SR04 Ultrasonic Sensor Measurement ---
   long duration, ultrasonicDistance;
@@ -108,7 +108,7 @@ void loop() {
 
     display.setCursor(0, 0);
     display.print("Laser (mm): ");
-    if (laser != 0)
+    if (laser != 9999)
       display.print(laser);
     else
       display.print("Out of Range");

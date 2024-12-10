@@ -11,7 +11,6 @@
 #define SCREEN_ADDRESS 0x3C
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 
-
 // Pins for Ultrasonic sensor
 const int triggerPin = 9;
 const int echoPin = 10;
@@ -26,6 +25,12 @@ const unsigned long interval = 1000;  // Update interval for OLED
 
 int currentEEPROMAddress = 0;
 
+// Define the SensorData object structure
+struct SensorData {
+  int laser;
+  int ultrasonicDistance;
+  float gyro;
+};
 
 void setup() {
   // Initialize serial communication
@@ -73,10 +78,10 @@ void loop() {
   VL53L0X_RangingMeasurementData_t measure;
   lox.rangingTest(&measure, false);  // Perform measurement
   int laser;
-    if (measure.RangeStatus != 4)  // phase failures have incorrect data
+  if (measure.RangeStatus != 4)  // phase failures have incorrect data
     laser = measure.RangeMilliMeter;
   else
-    laser =9999;
+    laser = 0;
 
   // --- HC-SR04 Ultrasonic Sensor Measurement ---
   long duration, ultrasonicDistance;
@@ -97,23 +102,27 @@ void loop() {
   // --- MPU6050 Accelerometer and Gyroscope Measurement ---
   sensors_event_t a, g, temp;
   mpu.getEvent(&a, &g, &temp);
-  float temperature = temp.temperature;
-
-  // --- Print all sensor data to Serial Monitor ---
+  float gyro = g.gyro.x;
 
   // --- Update OLED Display ---
   if (currentMillis - previousMillis >= interval) {
 
+    // Create a SensorData object
+    SensorData sensorData;
+    sensorData.laser = laser;
+    sensorData.ultrasonicDistance = ultrasonicDistance;
+    sensorData.gyro = gyro;
+
+    // Print all sensor data to Serial Monitor
     Serial.print(laser);
     Serial.print(",");
     Serial.print(ultrasonicDistance);
     Serial.print(",");
-    Serial.println(temperature);
-
+    Serial.println(gyro);
 
     display.setCursor(0, 0);
     display.print("Laser (mm): ");
-    if (laser != 9999)
+    if (laser != 0)
       display.print(laser);
     else
       display.print("Out of Range");
@@ -126,39 +135,32 @@ void loop() {
 
     // Display MPU6050 gyroscope data
     display.setCursor(0, 40);
-    display.print("Temp: ");
-    display.print(temperature);
-    display.print(" C");
+    display.print("Gyro (X): ");
+    display.print(gyro);
 
     // Update the display
     display.display();
     display.clearDisplay();
-
-    saveDataToEEPROM(laser, ultrasonicDistance, temperature);
+    saveDataToEEPROM(sensorData);
 
     previousMillis = currentMillis;
   }
 }
 
-
-void saveDataToEEPROM(int laserDistance, int distanceUltrasonic, float gyroReading) {
-  // Create a formatted string: "int1,int2,float\n"
-  String dataString = String(laserDistance) + "," + String(distanceUltrasonic) + "," + String(gyroReading, 2) + "\n"; // Add '\n' for new line
-
-  // Write the string to EEPROM character by character
-  for (int i = 0; i < dataString.length(); i++) {
-    if (currentEEPROMAddress >= EEPROM.length()) {
-      Serial.println("Error: EEPROM capacity exceeded.");
-      return; // Stop writing to avoid overflow
-    }
-
-    EEPROM.write(currentEEPROMAddress, dataString[i]);
-    currentEEPROMAddress++;  // Increment address for each character
+void saveDataToEEPROM(SensorData data) {
+  // Check if there's enough space in EEPROM for the next SensorData entry
+  if (currentEEPROMAddress + sizeof(SensorData) > EEPROM.length()) {
+    currentEEPROMAddress = 0;  // Reset address to start overwriting
   }
 
-  // Optionally, add a null terminator (for safety during retrieval)
-  if (currentEEPROMAddress < EEPROM.length()) {
-    EEPROM.write(currentEEPROMAddress, '\0');
+  // Write the entire SensorData structure to EEPROM
+  EEPROM.put(currentEEPROMAddress, data);
+
+  // Update the currentEEPROMAddress to point to the next entry
+  currentEEPROMAddress += sizeof(SensorData);
+
+  // Ensure the address doesn't exceed the EEPROM length
+  if (currentEEPROMAddress >= EEPROM.length()) {
+    currentEEPROMAddress = 0;
   }
 }
-

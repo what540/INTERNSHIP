@@ -57,10 +57,12 @@ void getDataFromEEPROM() {
     char laserbuffer[4];
     dtostrf(data.laser, 4, 0, laserbuffer);
     Serial.print(laserbuffer);
+    Serial.print("mm  ");
     Serial.print("    |   Ultrasonic =  ");
     char ultrasonicDistancebuffer[4];
     dtostrf(data.ultrasonicDistance, 4, 0, ultrasonicDistancebuffer);
     Serial.print(ultrasonicDistancebuffer);
+    Serial.print("cm  ");
     Serial.print("    |   Gyro =   ");
     Serial.println(data.gyro, 2);
   }
@@ -69,4 +71,4 @@ void getDataFromEEPROM() {
 void loop() {
   // Nothing to do in loop for now
 }
-
+4

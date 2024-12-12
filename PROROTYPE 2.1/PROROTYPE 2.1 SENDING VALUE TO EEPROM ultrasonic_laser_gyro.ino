@@ -25,8 +25,12 @@ const unsigned long interval = 1000;  // Update interval for OLED
 
 int currentEEPROMAddress = 0;
 
+int timeIndication=0;
+
+
 // Define the SensorData object structure
 struct SensorData {
+  int timeIndication;
   int laser;
   int ultrasonicDistance;
   float gyro;
@@ -104,11 +108,16 @@ void loop() {
   mpu.getEvent(&a, &g, &temp);
   float gyro = g.gyro.x;
 
+
+
   // --- Update OLED Display ---
   if (currentMillis - previousMillis >= interval) {
+    timeIndication++;
+
 
     // Create a SensorData object
     SensorData sensorData;
+    sensorData.timeIndication = timeIndication;
     sensorData.laser = laser;
     sensorData.ultrasonicDistance = ultrasonicDistance;
     sensorData.gyro = gyro;

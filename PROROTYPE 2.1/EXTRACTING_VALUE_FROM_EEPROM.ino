@@ -21,14 +21,11 @@ void setup() {
   Serial.println("EEPROM is cleared!");
 }
 
-void loop() {
-  // Nothing to do in loop for now
-}
-
 // Function to retrieve and parse data from EEPROM
 void getDataFromEEPROM() {
   // Define the SensorData structure
   struct SensorData {
+    int timeIndication;
     int laser;
     int ultrasonicDistance;
     float gyro;
@@ -38,8 +35,6 @@ void getDataFromEEPROM() {
   int entrySize = sizeof(SensorData);
   int numEntries = EEPROM.length() / entrySize;
 
-  int count = 1;
-
   Serial.println("\n\n\nRetrieving Sensor Data from EEPROM:");
 
   for (int i = 0; i < EEPROM.length(); i += entrySize) {
@@ -48,19 +43,30 @@ void getDataFromEEPROM() {
     SensorData data;
     EEPROM.get(i, data);
 
-      
-      Serial.print("Address ");
-      Serial.print(i);
-      Serial.print(": Laser = ");
-      Serial.print(data.laser);
-      Serial.print(", Ultrasonic = ");
-      Serial.print(data.ultrasonicDistance);
-      Serial.print(", Gyro = ");
-      Serial.println(data.gyro, 2);  // Print gyro with 2 decimal places
-      
-      count++;  // Increment count for each valid entry
 
+    Serial.print("Address ");
+    char Addressbuffer[5];
+    dtostrf(i, 5, 0, Addressbuffer);
+    Serial.print(Addressbuffer);
+    Serial.print("    |   Time: ");
+    char timeIndicationsbuffer[7];
+    dtostrf(data.timeIndication, 7, 0, timeIndicationsbuffer);
+    Serial.print(timeIndicationsbuffer);
+    Serial.print("s  ");
+    Serial.print("    |  Laser =   ");
+    char laserbuffer[4];
+    dtostrf(data.laser, 4, 0, laserbuffer);
+    Serial.print(laserbuffer);
+    Serial.print("    |   Ultrasonic =  ");
+    char ultrasonicDistancebuffer[4];
+    dtostrf(data.ultrasonicDistance, 4, 0, ultrasonicDistancebuffer);
+    Serial.print(ultrasonicDistancebuffer);
+    Serial.print("    |   Gyro =   ");
+    Serial.println(data.gyro, 2);
   }
 }
 
+void loop() {
+  // Nothing to do in loop for now
+}
 

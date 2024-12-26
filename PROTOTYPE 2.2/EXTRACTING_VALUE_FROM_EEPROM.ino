@@ -6,18 +6,15 @@ int currentEEPROMAddress = 0;
 void setup() {
   // Initialize serial communication
   Serial.begin(115200);
-  delay(5000);
+  delay(2000);
 
   // Retrieve and parse data from EEPROM
   getDataFromEEPROM();
 
-  Serial.println("DONE");
+  Serial.println("Retrieval DONE, clearing EEPROM now... ...");
 
-  // Clear EEPROM after reading
-  for (int i = 0; i < EEPROM.length(); i++) {
-    EEPROM.write(i, 0);  // Clear all EEPROM data by writing 0 to each address
-  }
-
+  // Clear EEPROM after reading if required
+  clearEEPROM();
   Serial.println("EEPROM is cleared!");
 }
 
@@ -38,36 +35,41 @@ void getDataFromEEPROM() {
   Serial.println("\n\n\nRetrieving Sensor Data from EEPROM:");
 
   for (int i = 0; i < EEPROM.length(); i += entrySize) {
-
     // Retrieve the data from EEPROM
     SensorData data;
     EEPROM.get(i, data);
 
-    if ((!(data.laser == 0 && data.ultrasonicDistance == 0 && data.gyro == 0))||(!(data.timeIndication==4090))) {
-      Serial.print("Address ");
-      char Addressbuffer[5];
-      dtostrf(i, 5, 0, Addressbuffer);
-      Serial.print(Addressbuffer);
-      Serial.print("    |   Time: ");
-      char timeIndicationsbuffer[7];
-      dtostrf(data.timeIndication, 7, 0, timeIndicationsbuffer);
-      Serial.print(timeIndicationsbuffer);
-      Serial.print("s  ");
-      Serial.print("    |  Laser =   ");
-      char laserbuffer[4];
-      dtostrf(data.laser, 4, 0, laserbuffer);
-      Serial.print(laserbuffer);
-      Serial.print("mm  ");
-      Serial.print("    |   Ultrasonic =  ");
-      char ultrasonicDistancebuffer[4];
-      dtostrf(data.ultrasonicDistance, 4, 0, ultrasonicDistancebuffer);
-      Serial.print(ultrasonicDistancebuffer);
-      Serial.print("cm  ");
-      Serial.print("    |   Gyro =   ");
-      Serial.println(data.gyro, 2);
+    // Check if the data is valid (non-zero)
+    if (data.timeIndication != 0) {
+      Serial.println("Address | Time (s)  | Laser (mm) | Ultrasonic (cm) | Gyro");
+      // Print the data with manual alignment
+      Serial.print(padLeft(String(i), 7));  // Address column
+      Serial.print(" | ");
+      Serial.print(padLeft(String(data.timeIndication), 9));  // Time column
+      Serial.print(" | ");
+      Serial.print(padLeft(String(data.laser), 10));  // Laser column
+      Serial.print(" | ");
+      Serial.print(padLeft(String(data.ultrasonicDistance), 15));  // Ultrasonic column
+      Serial.print(" | ");
+      Serial.println(String(data.gyro, 2));  // Gyro column with 2 decimal places
     }
   }
 }
+
+// Function to clear EEPROM
+void clearEEPROM() {
+  for (int i = 0; i < EEPROM.length(); i++) {
+    EEPROM.write(i, 0);  // Clear all EEPROM data by writing 0 to each address
+  }
+}
+
+String padLeft(String str, int width) {
+  while (str.length() < width) {
+    str = " " + str;
+  }
+  return str;
+}
+
 
 void loop() {
   // Nothing to do in loop for now

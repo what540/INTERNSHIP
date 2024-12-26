@@ -12,8 +12,8 @@
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 
 // Pins for Ultrasonic sensor
-const int triggerPin = 49;
-const int echoPin = 47;
+const int triggerPin = 39;
+const int echoPin = 41;
 
 // Create sensor objects
 Adafruit_VL53L0X lox;
@@ -86,7 +86,7 @@ void loop() {
   if (measure.RangeStatus != 4)  // phase failures have incorrect data
     laser = measure.RangeMilliMeter;
   else
-    laser = 0;
+    laser = 8191;
 
   // --- HC-SR04 Ultrasonic Sensor Measurement ---
   long duration, ultrasonicDistance;
@@ -132,7 +132,7 @@ void loop() {
 
     display.setCursor(0, 0);
     display.print("Laser (mm): ");
-    if (laser != 0)
+    if (laser != 8191)
       display.print(laser);
     else
       display.print("Out of Range");

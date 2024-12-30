@@ -282,45 +282,58 @@ main_container.pack(side="left", padx=10)
 ultrasonic_frame = tk.LabelFrame(main_container, text="Ultrasonic Sensor", padx=10, pady=10)
 ultrasonic_frame.grid(row=0, column=0, padx=30)  # Use grid layout for better control
 
+ultrasonic_distance_label = tk.Label(ultrasonic_frame, text="Current Distance (cm):", font=("Arial", 12))
+ultrasonic_distance_label.grid(row=0, column=0, pady=5, sticky="w")
 ultrasonic_distance_label_value = tk.Label(ultrasonic_frame, text="0 cm", font=("Arial", 20))
-ultrasonic_distance_label_value.grid(row=0, column=0, pady=5)
+ultrasonic_distance_label_value.grid(row=0, column=1, pady=5)
 
-ultrasonic_range_label_value = tk.Label(ultrasonic_frame, text="0 cm/s", font=("Arial", 20))
-ultrasonic_range_label_value.grid(row=1, column=0, pady=5)
-
-ultrasonic_hogging_label_value = tk.Label(ultrasonic_frame, text="OK", font=("Arial", 20))
-ultrasonic_hogging_label_value.grid(row=2, column=0, pady=5)
-
+ultrasonic_previous_value_label = tk.Label(ultrasonic_frame, text="Previous:", font=("Arial", 12))
+ultrasonic_previous_value_label.grid(row=1, column=0, pady=5, sticky="w")
 ultrasonic_previous_value_label_value = tk.Label(ultrasonic_frame, text="N/A", font=("Arial", 20))
-ultrasonic_previous_value_label_value.grid(row=3, column=0, pady=5)
+ultrasonic_previous_value_label_value.grid(row=1, column=1, pady=5)
 
-ultrasonic_current_value_label_value = tk.Label(ultrasonic_frame, text="N/A", font=("Arial", 20))
-ultrasonic_current_value_label_value.grid(row=4, column=0, pady=5)
+ultrasonic_range_label = tk.Label(ultrasonic_frame, text="Range (cm/s):", font=("Arial", 12))
+ultrasonic_range_label.grid(row=2, column=0, pady=5, sticky="w")
+ultrasonic_range_label_value = tk.Label(ultrasonic_frame, text="0 cm/s", font=("Arial", 20))
+ultrasonic_range_label_value.grid(row=2, column=1, pady=5)
+
+ultrasonic_hogging_label = tk.Label(ultrasonic_frame, text="Status:", font=("Arial", 12))
+ultrasonic_hogging_label.grid(row=3, column=0, pady=5, sticky="w")
+ultrasonic_hogging_label_value = tk.Label(ultrasonic_frame, text="OK", font=("Arial", 20))
+ultrasonic_hogging_label_value.grid(row=3, column=1, pady=5)
 
 # Laser sensor frame
 laser_frame = tk.LabelFrame(main_container, text="Laser Sensor", padx=10, pady=10)
 laser_frame.grid(row=0, column=1, padx=30)  # Place laser frame next to ultrasonic sensor frame
 
+laser_distance_label = tk.Label(laser_frame, text="Current Distance (mm):", font=("Arial", 12))
+laser_distance_label.grid(row=0, column=0, pady=5, sticky="w")
 laser_distance_label_value = tk.Label(laser_frame, text="0 mm", font=("Arial", 20))
-laser_distance_label_value.grid(row=0, column=0, pady=5)
+laser_distance_label_value.grid(row=0, column=1, pady=5)
 
-laser_range_label_value = tk.Label(laser_frame, text="0 mm/s", font=("Arial", 20))
-laser_range_label_value.grid(row=1, column=0, pady=5)
-
-laser_hogging_label_value = tk.Label(laser_frame, text="OK", font=("Arial", 20))
-laser_hogging_label_value.grid(row=2, column=0, pady=5)
-
+laser_previous_value_label = tk.Label(laser_frame, text="Previous:", font=("Arial", 12))
+laser_previous_value_label.grid(row=1, column=0, pady=5, sticky="w")
 laser_previous_value_label_value = tk.Label(laser_frame, text="N/A", font=("Arial", 20))
-laser_previous_value_label_value.grid(row=3, column=0, pady=5)
+laser_previous_value_label_value.grid(row=1, column=1, pady=5)
 
-laser_current_value_label_value = tk.Label(laser_frame, text="N/A", font=("Arial", 20))
-laser_current_value_label_value.grid(row=4, column=0, pady=5)
+laser_range_label = tk.Label(laser_frame, text="Range (mm/s):", font=("Arial", 12))
+laser_range_label.grid(row=2, column=0, pady=5, sticky="w")
+laser_range_label_value = tk.Label(laser_frame, text="0 mm/s", font=("Arial", 20))
+laser_range_label_value.grid(row=2, column=1, pady=5)
+
+laser_hogging_label = tk.Label(laser_frame, text="Status:", font=("Arial", 12))
+laser_hogging_label.grid(row=3, column=0, pady=5, sticky="w")
+laser_hogging_label_value = tk.Label(laser_frame, text="OK", font=("Arial", 20))
+laser_hogging_label_value.grid(row=3, column=1, pady=5)
+
 
 gyro_frame = tk.LabelFrame(main_container, text="Gyro Sensor", padx=10, pady=10)
 gyro_frame.grid(row=0, column=2, padx=10)
 
+gyro_label = tk.Label(gyro_frame, text="Gyro X (deg/s):", font=("Arial", 12))
+gyro_label.grid(row=0, column=0, pady=5, sticky="w")
 gyro_label_value = tk.Label(gyro_frame, text="0.0 deg/s", font=("Arial", 20))
-gyro_label_value.grid(row=0, column=0, pady=5)
+gyro_label_value.grid(row=0, column=1, pady=5)
 
 
 # Start the Tkinter event loop

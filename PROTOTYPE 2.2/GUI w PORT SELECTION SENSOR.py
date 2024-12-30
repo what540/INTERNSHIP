@@ -81,12 +81,10 @@ def stop_measuring():
     ultrasonic_range_label_value.config(text="0 cm/s")
     ultrasonic_hogging_label_value.config(text="OK")
     ultrasonic_previous_value_label_value.config(text="N/A")
-    ultrasonic_current_value_label_value.config(text="N/A")
     laser_distance_label_value.config(text="0 mm")
     laser_range_label_value.config(text="0 mm/s")
     laser_hogging_label_value.config(text="OK")
     laser_previous_value_label_value.config(text="N/A")
-    laser_current_value_label_value.config(text="N/A")
     gyro_label_value.config(text="0.0 deg/s")
     root.after(0, update_stop_measurement_ui)
 
@@ -170,11 +168,9 @@ def calculate_and_update_range(previous_value, current_value, sensor_type):
     if sensor_type == "ultrasonic":
         ultrasonic_range_label_value.config(text=f"{range_value} cm/s")
         ultrasonic_previous_value_label_value.config(text=f"{previous_value} cm")
-        ultrasonic_current_value_label_value.config(text=f"{current_value} cm")
     elif sensor_type == "laser":
         laser_range_label_value.config(text=f"{range_value} mm/s")
         laser_previous_value_label_value.config(text=f"{previous_value} mm")
-        laser_current_value_label_value.config(text=f"{current_value} mm")
 
 
 def update_distance_label(distance, sensor_type):
@@ -231,12 +227,10 @@ def close_serial():
             ultrasonic_range_label_value.config(text="0 cm/s")
             ultrasonic_hogging_label_value.config(text="OK")
             ultrasonic_previous_value_label_value.config(text="N/A")
-            ultrasonic_current_value_label_value.config(text="N/A")
             laser_distance_label_value.config(text="0 mm")
             laser_range_label_value.config(text="0 mm/s")
             laser_hogging_label_value.config(text="OK")
             laser_previous_value_label_value.config(text="N/A")
-            laser_current_value_label_value.config(text="N/A")
             gyro_label_value.config(text="0.0 deg/s")
 
 

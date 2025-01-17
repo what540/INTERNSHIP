@@ -14,6 +14,8 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 const int triggerPin = 33;
 const int echoPin = 32;
 
+float gyro = 0;
+
 // Create sensor objects
 Adafruit_VL53L0X lox;  // Laser distance sensor
 Adafruit_MPU6050 mpu;  // MPU6050 for accelerometer and gyroscope data
@@ -38,6 +40,22 @@ double previousUltrasonic = 0;      // Stores previous ultrasonic distance
 double ultrasonicDistanceSum = 0;   // Stores previous ultrasonic distance
 double ultraReadings[numReadings];  // Array to store the readings
 
+double UltraMaxValueInterval = 0;
+double UltraMinValueInterval = 0;
+double UltraRANGEinterval = 0;
+
+double LaserMaxValueInterval = 0;
+double LaserMinValueInterval = 0;
+double LaserRANGEinterval = 0;
+
+double diffUltraInOneSec = 0;
+double diffLaserInOneSec = 0;
+
+double UltraSqDiff = 0;
+double UltraStdDev = 0;
+int LaserSqDiff = 0;
+double LaserStdDev = 0;
+
 #include "FS.h"
 #include <SD.h>
 #include <SPI.h>
@@ -55,12 +73,9 @@ NTPClient timeClient(ntpUDP, "pool.ntp.org", utcOffsetInSeconds);
 #include "RTClib.h"
 RTC_DS3231 rtc;
 
-#include <cmath>
-
-
-#define TX_PIN 17           // RS485 TX Pin
-#define RX_PIN 16           // RS485 RX Pin
-#define DE_RE_PIN 4         // RS485 Driver Enable/Receiver Enable Pin
+#define TX_PIN 17                                    // RS485 TX Pin
+#define RX_PIN 16                                    // RS485 RX Pin
+#define DE_RE_PIN 4                                  // RS485 Driver Enable/Receiver Enable Pin
 char tx_buffer[1000] = "";  // Buffer for data to send
 void RS485_SetTX() {
   digitalWrite(DE_RE_PIN, HIGH);  // Enable Driver for Transmission
@@ -75,13 +90,19 @@ void RS485_Send(const char *buf, uint16_t size) {
   RS485_SetRX();                        // Switch back to receive mode
 }
 
+const char *ssid = "ipad";
+const char *password = "ily666777";
 
-/*const char *ssid = "";
-const char *password = "";*/
+unsigned long currentMillis = 0;
+
+#define LED_pin 13
+
+
 
 void setup() {
   // Initialize serial communication
   Serial.begin(115200);
+  checkSDCard();
   WiFi.begin(ssid, password);
   delay(3000);
   if (!rtc.begin()) {
@@ -136,174 +157,224 @@ void setup() {
 
   Serial.flush();
   Serial2.flush();
+
+  pinMode(LED_pin, OUTPUT);
+
+  digitalWrite(LED_pin, LOW);
 }
 
+bool measuring_status = false;
+bool laser_pointers_status = false;
+
+String measuring_command = "STOP";
+String laser_pointers_command = "OFF";
+
 void loop() {
-  unsigned long currentMillis = millis();
+  currentMillis = millis();
+  if (Serial.available() > 0) {
+    measuring_command = Serial.readStringUntil(':');//https://youtu.be/VdSFwYrYqW0?si=4_7ddYQORFcv9GpS
+    laser_pointers_command = Serial.readStringUntil('\n');
+  }
 
-  // --- MPU6050 Accelerometer and Gyroscope Measurement ---
-  sensors_event_t a, g, temp;
-  mpu.getEvent(&a, &g, &temp);
-  float gyro = g.gyro.x;  // Get x-axis gyroscope data
+  if (measuring_command == "START") {
+    measuring_status = true;
+  } else if (measuring_command == "STOP") {
+    measuring_status = false;
+  } else {
+    measuring_status = measuring_status;
+  }
+  if (laser_pointers_command == "ON") {
+    laser_pointers_status = true;
+  } else if (laser_pointers_command == "OFF") {
+    laser_pointers_status = false;
+  } else {
+    laser_pointers_status = laser_pointers_status;
+  }
 
-  if (currentMillis - ReadingPreviousMillis >= ReadingInterval) {
-    Serial.flush();
+  if (laser_pointers_status)
+    digitalWrite(LED_pin, HIGH);
+  else
+    digitalWrite(LED_pin, LOW);
+  if (measuring_status) {
+    if (currentMillis - ReadingPreviousMillis >= ReadingInterval) {
+      // --- MPU6050 Accelerometer and Gyroscope Measurement ---
+      sensors_event_t a, g, temp;
+      mpu.getEvent(&a, &g, &temp);
+      gyro = g.gyro.x;  // Get x-axis gyroscope data
 
-    // --- VL53L0X Distance Measurement ---
-    VL53L0X_RangingMeasurementData_t measure;
-    lox.rangingTest(&measure, false);                                 // Perform measurement
-    if (measure.RangeStatus != 4 && measure.RangeMilliMeter != 8191)  // Phase failures have incorrect data
-      laser = (double)measure.RangeMilliMeter - 10;
-    else
-      laser = 0;  // Error code for invalid measurement
-    // Send a pulse to the ultrasonic sensor
-    digitalWrite(triggerPin, LOW);
-    delayMicroseconds(2);
-    digitalWrite(triggerPin, HIGH);
-    delayMicroseconds(10);
-    digitalWrite(triggerPin, LOW);
+      // --- VL53L0X Distance Measurement ---
+      VL53L0X_RangingMeasurementData_t measure;
+      lox.rangingTest(&measure, false);                                 // Perform measurement
+      if (measure.RangeStatus != 4 && measure.RangeMilliMeter != 8191)  // Phase failures have incorrect data
+        laser = (double)measure.RangeMilliMeter - 10;
+      else
+        laser = 0;  // Error code for invalid measurement
+      // Send a pulse to the ultrasonic sensor
+      digitalWrite(triggerPin, LOW);
+      delayMicroseconds(2);
+      digitalWrite(triggerPin, HIGH);
+      delayMicroseconds(10);
+      digitalWrite(triggerPin, LOW);
 
-    // Measure the time for the pulse to return
-    long duration = pulseIn(echoPin, HIGH);
+      // Measure the time for the pulse to return
+      long duration = pulseIn(echoPin, HIGH);
 
-    // Calculate the distance in cm
-    ultrasonicDistance = 10 * duration * 0.0344 / 2;
+      // Calculate the distance in cm
+      ultrasonicDistance = 10 * duration * 0.0344 / 2;
 
-    laserReadings[currentIndex] = laser;
-    ultraReadings[currentIndex] = ultrasonicDistance;
+      laserReadings[currentIndex] = laser;
+      ultraReadings[currentIndex] = ultrasonicDistance;
 
-    currentIndex++;
-    if (currentIndex >= numReadings) {
-      if (currentMillis - previousMillis >= interval) {
-        Serial.flush();
-        double UltraMaxValueInterval = ultraReadings[0];
-        double UltraMinValueInterval = ultraReadings[0];
-        double UltraRANGEinterval = 0;
-        ultrasonicDistanceSum = 0;  // Reset sum for averaging
+      currentIndex++;
+      if (currentIndex >= numReadings) {
+        if (currentMillis - previousMillis >= interval) {
+          Serial.flush();
+          UltraMaxValueInterval = ultraReadings[0];
+          UltraMinValueInterval = ultraReadings[0];
+          UltraRANGEinterval = 0;
+          ultrasonicDistanceSum = 0;  // Reset sum for averaging
 
-        double LaserMaxValueInterval = laserReadings[0];
-        double LaserMinValueInterval = laserReadings[0];
-        double LaserRANGEinterval = 0;
-        laserSum = 0;
+          LaserMaxValueInterval = laserReadings[0];
+          LaserMinValueInterval = laserReadings[0];
+          LaserRANGEinterval = 0;
+          laserSum = 0;
 
-        //by geeksforgeeks 28 Dec, 2024 https://www.geeksforgeeks.org/mathematics-mean-variance-and-standard-deviation/
-        //by Roel Van de Paar 23 Oct 2021 https://www.youtube.com/watch?v=NzWNJsG5EP8&t=38s&ab_channel=RoelVandePaar
-        for (int i = 0; i < numReadings; i++) {
-          ultrasonicDistanceSum += ultraReadings[i];
-          if (ultraReadings[i] > UltraMaxValueInterval) {
-            UltraMaxValueInterval = ultraReadings[i];
-          } else if (ultraReadings[i] < UltraMinValueInterval) {
-            UltraMinValueInterval = ultraReadings[i];
+          //by geeksforgeeks 28 Dec, 2024 https://www.geeksforgeeks.org/mathematics-mean-variance-and-standard-deviation/
+          //by Roel Van de Paar 23 Oct 2021 https://www.youtube.com/watch?v=NzWNJsG5EP8&t=38s&ab_channel=RoelVandePaar
+          for (int i = 0; i < numReadings; i++) {
+            ultrasonicDistanceSum += ultraReadings[i];
+            if (ultraReadings[i] > UltraMaxValueInterval) {
+              UltraMaxValueInterval = ultraReadings[i];
+            } else if (ultraReadings[i] < UltraMinValueInterval) {
+              UltraMinValueInterval = ultraReadings[i];
+            }
+
+            laserSum += laserReadings[i];
+            if (laserReadings[i] > LaserMaxValueInterval) {
+              LaserMaxValueInterval = laserReadings[i];
+            } else if (laserReadings[i] < LaserMinValueInterval) {
+              LaserMinValueInterval = laserReadings[i];
+            }
           }
 
-          laserSum += laserReadings[i];
-          if (laserReadings[i] > LaserMaxValueInterval) {
-            LaserMaxValueInterval = laserReadings[i];
-          } else if (laserReadings[i] < LaserMinValueInterval) {
-            LaserMinValueInterval = laserReadings[i];
+          UltraRANGEinterval = UltraMaxValueInterval - UltraMinValueInterval;
+          ultrasonicDistance = ultrasonicDistanceSum / numReadings;
+          diffUltraInOneSec = ultrasonicDistance - previousUltrasonic;
+
+          LaserRANGEinterval = LaserMaxValueInterval - LaserMinValueInterval;
+          laser = laserSum / numReadings;
+          diffLaserInOneSec = laser - previousLaser;
+
+          UltraSqDiff = 0;
+          for (int i = 0; i < numReadings; i++) {
+            UltraSqDiff += (ultraReadings[i] - ultrasonicDistance) * (ultraReadings[i] - ultrasonicDistance);
+            ultraReadings[i] = 0;
           }
+          UltraSqDiff = UltraSqDiff / numReadings;
+          UltraStdDev = sqrt(UltraSqDiff);
+
+          int LaserSqDiff = 0;
+          for (int i = 0; i < numReadings; i++) {
+            LaserSqDiff += (laserReadings[i] - laser) * (laserReadings[i] - laser);
+            laserReadings[i] = 0;
+          }
+          LaserSqDiff = LaserSqDiff / numReadings;
+          LaserStdDev = sqrt(LaserSqDiff);
+
+          dataMessage = padLeft(String(printLocalTime()), 19) + ", " + padLeft(String(ultrasonicDistance, 2), 10) + ", " + padLeft(String(laser, 2), 10) + ", " + padLeft(String(gyro), 7) + "\n";
+          if (sdCardPresent) {
+            //Serial.println("SD card is available!");
+            appendFile(SD, "/data.txt", dataMessage.c_str());  //by Engr Fahad 21 Feb 2021 https://youtu.be/fPvW-dtB6i0?si=oah1L_oaQmai2ylV
+            // Perform SD card operations here
+          } else {
+            //Serial.println("SD card is NOT available!");
+          }
+
+          //https://youtu.be/kXjPUu9jZOw?si=3qPoobB1JeInpWOU
+          //https://how2electronics.com/rs-485-half-duplex-communication-with-max485-arduino/
+          snprintf(tx_buffer, sizeof(tx_buffer),
+                   "%.4f,%.2f,%.4f,%.2f,%.4f,%.2f,%.2f,%s\n", ultrasonicDistance, laser, diffUltraInOneSec, diffLaserInOneSec, previousUltrasonic, previousLaser, gyro, printLocalTime_timeOnly());
+          RS485_Send(tx_buffer, strlen(tx_buffer));  // Transmit the data
+
+          // Print all sensor data to Serial Monitor
+          Serial.print(ultrasonicDistance, 4);  //to Python by Paul McWhorter 25 Jan 2022 https://www.youtube.com/watch?v=VN3HJm3spRE&ab_channel=PaulMcWhorter
+          Serial.print(",");
+          Serial.print(laser);
+          Serial.print(",");
+          Serial.print(diffUltraInOneSec, 4);
+          Serial.print(",");
+          Serial.print(diffLaserInOneSec);
+          Serial.print(",");
+          Serial.print(previousUltrasonic, 4);
+          Serial.print(",");
+          Serial.print(previousLaser);
+          Serial.print(",");
+          Serial.print(gyro);
+          Serial.print(",");
+          Serial.println(printLocalTime_timeOnly());
+
+          display.setCursor(0, 0);
+          display.print(printLocalTime());
+
+          display.setCursor(0, 10);
+          display.print("Laser (mm): ");
+          if (laser != 0)
+            display.print(laser, 2);
+          else
+            display.print("N/A");
+          // Display Laser Range on OLED
+          display.setCursor(0, 20);
+          display.print("Range(L): ");
+          display.print(diffLaserInOneSec, 2);
+
+          // Display Ultrasonic distance
+          display.setCursor(0, 30);
+          display.print("Ultra(mm): ");
+          display.print(ultrasonicDistance, 4);
+
+          // Display Ultrasonic Range on OLED
+          display.setCursor(0, 40);
+          display.print("Range(U): ");
+          display.print(diffUltraInOneSec, 4);
+
+          // Display MPU6050 gyroscope data
+          display.setCursor(0, 50);
+          display.print("Gyro(X): ");
+          display.print(gyro);
+
+          // Update the display
+          display.display();
+          display.clearDisplay();
+
+          previousUltrasonic = ultrasonicDistance;  // Update previous values
+          previousLaser = laser;
+          previousMillis = currentMillis;  // Reset timing
         }
-
-        UltraRANGEinterval = UltraMaxValueInterval - UltraMinValueInterval;
-        ultrasonicDistance = ultrasonicDistanceSum / numReadings;
-        double diffUltraInOneSec = ultrasonicDistance - previousUltrasonic;
-
-        LaserRANGEinterval = LaserMaxValueInterval - LaserMinValueInterval;
-        laser = laserSum / numReadings;
-        double diffLaserInOneSec = laser - previousLaser;
-
-        double UltraSqDiff = 0;
-        for (int i = 0; i < numReadings; i++) {
-          UltraSqDiff += (ultraReadings[i] - ultrasonicDistance) * (ultraReadings[i] - ultrasonicDistance);
-          ultraReadings[i] = 0;
-        }
-        UltraSqDiff = UltraSqDiff / numReadings;
-        double UltraStdDev = sqrt(UltraSqDiff);
-
-        int LaserSqDiff = 0;
-        for (int i = 0; i < numReadings; i++) {
-          LaserSqDiff += (laserReadings[i] - laser) * (laserReadings[i] - laser);
-          laserReadings[i] = 0;
-        }
-        LaserSqDiff = LaserSqDiff / numReadings;
-        double LaserStdDev = sqrt(LaserSqDiff);
-
-        dataMessage = padLeft(String(printLocalTime()), 19) + ", " + padLeft(String(ultrasonicDistance, 2), 10) + ", " + padLeft(String(laser, 2), 10) + ", " + padLeft(String(gyro), 7) + "\n";
-        if (sdCardPresent) {
-          //Serial.println("SD card is available!");
-          appendFile(SD, "/data.txt", dataMessage.c_str());  //by Engr Fahad 21 Feb 2021 https://youtu.be/fPvW-dtB6i0?si=oah1L_oaQmai2ylV
-          // Perform SD card operations here
-        } else {
-          //Serial.println("SD card is NOT available!");
-        }
-
-        //https://youtu.be/kXjPUu9jZOw?si=3qPoobB1JeInpWOU
-        //https://how2electronics.com/rs-485-half-duplex-communication-with-max485-arduino/
-        snprintf(tx_buffer, sizeof(tx_buffer),
-                 "%.4f,%.2f,%.4f,%.2f,%.4f,%.2f,%.2f\n", ultrasonicDistance, laser, diffUltraInOneSec, diffLaserInOneSec, previousUltrasonic, previousLaser, gyro);
-        RS485_Send(tx_buffer, strlen(tx_buffer));  // Transmit the data
-
-        // Print all sensor data to Serial Monitor
-        Serial.print(ultrasonicDistance, 4);  //to Python by Paul McWhorter 25 Jan 2022 https://www.youtube.com/watch?v=VN3HJm3spRE&ab_channel=PaulMcWhorter
-        Serial.print(",");
-        Serial.print(laser);
-        Serial.print(",");
-        Serial.print(diffUltraInOneSec, 4);
-        Serial.print(",");
-        Serial.print(diffLaserInOneSec);
-        Serial.print(",");
-        Serial.print(previousUltrasonic, 4);
-        Serial.print(",");
-        Serial.print(previousLaser);
-        Serial.print(",");
-        Serial.println(gyro);
-
-        // Display on OLED
-        display.setCursor(0, 0);
-        display.print(printLocalTime());
-
-        display.setCursor(0, 10);
-        display.print("Laser (mm): ");
-        if (laser != 0)
-          display.print(laser, 2);
-        else
-          display.print("N/A");
-        // Display Laser Range on OLED
-        display.setCursor(0, 20);
-        display.print("Range(L): ");
-        display.print(diffLaserInOneSec, 2);
-        display.print(" mm");
-
-        // Display Ultrasonic distance
-        display.setCursor(0, 30);
-        display.print("Ultrasonic: ");
-        display.print(ultrasonicDistance, 2);
-        display.print(" cm");
-
-        // Display Ultrasonic Range on OLED
-        display.setCursor(0, 40);
-        display.print("Range(U): ");
-        display.print(diffUltraInOneSec, 2);
-        display.print(" cm");
-
-        // Display MPU6050 gyroscope data
-        display.setCursor(0, 50);
-        display.print("Gyro(X): ");
-        display.print(gyro);
-
-        // Update the display
-        display.display();
-        display.clearDisplay();
-
-        checkSDCard();
-
-        previousUltrasonic = ultrasonicDistance;  // Update previous values
-        previousLaser = laser;
-        previousMillis = currentMillis;  // Reset timing
+        currentIndex = 0;
       }
-      currentIndex = 0;
+      ReadingPreviousMillis = currentMillis;
     }
-    ReadingPreviousMillis = currentMillis;
+  } else {
+    display.setCursor(0, 0);
+    display.print(printLocalTime());
+
+    display.setCursor(0, 10);
+    display.print("Not measuring");
+    display.setCursor(0, 20);
+    if (sdCardPresent)
+      display.print("SD FOUND");
+    else if (!sdCardPresent)
+      display.print("SD NOT FOUND, NOT SAVING");
+    display.display();
+    display.clearDisplay();
+
+    checkSDCard();
+
+    previousMillis = 0;
+    previousUltrasonic = 0;  // Update previous values
+    previousLaser = 0;
+    ReadingPreviousMillis = 0;
+    currentIndex = 0;
   }
 }
 
@@ -313,18 +384,27 @@ String printLocalTime() {
   return timeString;                                                                                                                                                                                                                                                                                                                                 // Print the formatted time
 }
 
+String printLocalTime_timeOnly() {
+  DateTime now = rtc.now();
+  String timeString = (now.hour() < 10 ? "0" : "") + String(now.hour()) + ":" + (now.minute() < 10 ? "0" : "") + String(now.minute()) + ":" + (now.second() < 10 ? "0" : "") + String(now.second());  //Chatgpt
+  return timeString;                                                                                                                                                                                  // Print the formatted time
+}
+
 //ESP32 SD_Test Example https://github.com/espressif/arduino-esp32/blob/master/libraries/SD/examples/SD_Test/SD_Test.ino
 void appendFile(fs::FS &fs, const char *path, const char *message) {
   //Serial.printf("Appending to file: %s\n", path);
   File file = fs.open(path, FILE_APPEND);
   if (!file) {
     //Serial.println("Failed to open file for appending");
+    sdCardPresent = false;
     return;
   }
   if (file.print(message)) {
     //Serial.println("Message appended");
+    sdCardPresent = true;
   } else {
     //Serial.println("Append failed");
+    sdCardPresent = false;
   }
   file.close();
 }
@@ -335,18 +415,19 @@ void checkSDCard() {
   // Try reinitializing the SD card
   if (!SD.begin()) {
     sdCardPresent = false;
-    //Serial.println("Failed to initialize SD card.");
+    Serial.println("Failed to initialize SD card.");
     return;
   }
   // Check card type
   uint8_t cardType = SD.cardType();
   if (cardType == CARD_NONE) {
-    //Serial.println("No SD card attached.");
+    Serial.println("No SD card attached.");
     sdCardPresent = false;
   } else {
-    //Serial.println("SD card detected.");
+    Serial.println("SD card detected.");
     sdCardPresent = true;
   }
+  return;
 }
 
 //Chatgpt

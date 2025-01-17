@@ -1,25 +1,29 @@
 import tkinter as tk
+
 import serial
 import threading
 import serial.tools.list_ports
 from tkinter import ttk
-from time import *
 
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-import numpy as np
-
 
 # Configuration Constants
 arduino_BAUD_RATE = 115200
 connection = False
 # Sensor Variables
 measuring = False
+measuring_status = "STOP"
 
-ultra_distance_array =[]
-laser_distance_array =[]
+laser_pointers_status = "OFF"
+laser_pointers_for_measurement_state = False
+
+ultra_distance_list=[]
+laser_distance_list =[]
 time_string = ""
-time_string_array=[]
+time_string_list=[]
+
+array_for_arduino_to_decode=[]
 
 # Serial Connections
 def get_available_ports():
@@ -29,7 +33,6 @@ def get_available_ports():
 
 # Initialize arduinoData as None
 arduinoData = None
-
 
 def on_select():
     """Event handler for port selection."""
@@ -54,43 +57,48 @@ def refresh_ports():
     port_combobox['values'] = available_ports  # Update the combobox with new ports
 
 
-
 def update_gui_status():
     """Update the GUI to reflect the connection status."""
-    global connection
+    global connection, measuring_status
     if arduinoData:
         status_label.config(text="Connection: Established", foreground="green")
         select_button.config(state=tk.DISABLED)
         refresh_button.config(state=tk.DISABLED)
         start_button.config(state=tk.NORMAL)
         close_button.config(state=tk.NORMAL)
+        laser_pointer_button.config(state=tk.NORMAL)
+
         connection = True
     else:
         status_label.config(text="Connection: Failed", foreground="red")
 
 def start_measuring():
     """Start measuring for both sensors."""
-    global measuring, arduinoData
+    global measuring, arduinoData, measuring_status
     if not measuring:
         measuring = True
+        measuring_status = "START"
         threading.Thread(target=read_sensor_data, daemon=True).start()
+        write_to_arduino()
     root.after(0, update_start_measurement_ui)
 
 def stop_measuring():
     """Stop measuring for both sensors."""
-    global measuring, arduinoData
+    global measuring, arduinoData,measuring_status
+    arduinoData.reset_input_buffer()  # https://stackoverflow.com/questions/60766714/pyserial-flush-vs-reset-input-buffer-reset-output-buffer
     measuring = False
+    measuring_status = "STOP"
+    write_to_arduino()
     root.after(0, update_stop_measurement_ui)
 
 def read_sensor_data():
     global measuring, arduinoData, connection,time_string
     if connection and arduinoData:
         try:
-            arduinoData.reset_input_buffer() #https://stackoverflow.com/questions/60766714/pyserial-flush-vs-reset-input-buffer-reset-output-buffer
             while measuring:
                 if arduinoData.in_waiting > 0:
                     data = arduinoData.readline().decode('utf-8').strip().split(",")    #by Paul McWhorter 25 Jan 2022 https://www.youtube.com/watch?v=VN3HJm3spRE&ab_channel=PaulMcWhorter
-                    if len(data) ==7:
+                    if len(data) ==8:
                         ultra_distance = float(data[0])
                         laser_distance = float(data[1])
                         range_ultra_distance = float(data[2])
@@ -98,6 +106,7 @@ def read_sensor_data():
                         prev_ultra_distance = float(data[4])
                         prev_laser_distance = float(data[5])
                         gyro = float(data[6])
+                        time_from_arduino = str(data[7])
 
                         # Update Ultrasonic Sensor Data
                         root.after(0, ultrasonic_update_distance_label, ultra_distance)
@@ -108,16 +117,17 @@ def read_sensor_data():
                         ultrasonic_update_sensor_data(ultra_distance)
                         laser_update_sensor_data(laser_distance)
 
+
                         laser_distance_rounded = round(laser_distance, 2)
                         ultra_distance_rounded = round(ultra_distance, 2)
 
-                        ultra_distance_array.append(ultra_distance_rounded)
-                        laser_distance_array.append(laser_distance_rounded)
-                        time_string_array.append(time_string)
-
+                        ultra_distance_list.append(ultra_distance_rounded)
+                        laser_distance_list.append(laser_distance_rounded)
+                        time_string_list.append(time_from_arduino)
 
                         # Update Gyro Sensor Data
                         update_gyro_label(gyro)  # Update the gyro value separately
+
         except serial.SerialException as e:
             print(f"Error with serial connection: {e}")
             connection = False
@@ -132,11 +142,11 @@ def update_gyro_label(gyro):
 def ultrasonic_update_sensor_data(distance):
     status = "OK!"
     # Check for hogging/sagging status; used as 10cm original displacement between two objects for reference
-    if distance > 10:
+    if distance > 700:
         status = "Hogging!"
-    elif distance < 10:
+    elif distance < 700:
         status = "Sagging!"
-    elif distance == 10:
+    elif distance == 700:
         status = "OK!"
     root.after(0, ultrasonic_update_hogging_status, status)
 
@@ -144,11 +154,11 @@ def ultrasonic_update_sensor_data(distance):
 def laser_update_sensor_data(distance):
     status = "OK!"
     # Check for hogging/sagging status; used as 10cm original displacement between two objects for reference
-    if distance > 100:
+    if distance > 700:
         status = "Hogging!"
-    elif distance < 100:
+    elif distance < 700:
         status = "Sagging!"
-    elif distance == 100:
+    elif distance == 700:
         status = "OK!"
     root.after(0, laser_update_hogging_status, status)
 
@@ -212,6 +222,7 @@ def close_serial():
             close_button.config(state=tk.DISABLED)
             start_button.config(state=tk.DISABLED)
             stop_button.config(state=tk.DISABLED)
+            laser_pointer_button.config(state=tk.DISABLED)
             ultrasonic_distance_label_value.config(text="0 mm")
             ultrasonic_range_label_value.config(text="0 mm/s")
             ultrasonic_hogging_label_value.config(text="OK")
@@ -221,28 +232,31 @@ def close_serial():
             laser_hogging_label_value.config(text="OK")
             laser_previous_value_label_value.config(text="N/A")
             gyro_label_value.config(text="0.0 deg/s")
+            ultra_distance_list.clear()
+            laser_distance_list.clear()
+            time_string_list.clear()
 
 
-def clock_update():
-    global time_string_array, time_string
-    time_string = strftime("%H:%M:%S") #by Bro Code 16 Sept 2020  https://www.youtube.com/watch?v=l7IMBy4_nhA&t=183s&ab_channel=BroCode
-    time_label.config(text=time_string)
+#def clock_update():
+ #   global time_string_list, time_string
+ #   time_string = strftime("%H:%M:%S") #by Bro Code 16 Sept 2020  https://www.youtube.com/watch?v=l7IMBy4_nhA&t=183s&ab_channel=BroCode
+ #   time_label.config(text=time_string)
 
-    date_string = strftime("%a, %d %b %Y")
-    date_label.config(text=date_string)
-    root.after(1000,clock_update)
+ #   date_string = strftime("%a, %d %b %Y")
+ #   date_label.config(text=date_string)
+ #   root.after(1000,clock_update)
 
 def plot_graph_update():
-    global ultra_distance_array, laser_distance_array, time_string_array, time_string
+    global ultra_distance_list, laser_distance_list, time_string_list, time_string
 
     ax.clear()  # Clear the axes
-    ax.plot(time_string_array, ultra_distance_array, marker='x', markersize=5, label='Ultrasonic Distance')
-    ax.plot(time_string_array, laser_distance_array, marker='o', markersize=5, label='Laser Distance')
+    ax.plot(time_string_list, ultra_distance_list, marker='x', markersize=5, label='Ultrasonic Distance')
+    ax.plot(time_string_list, laser_distance_list, marker='o', markersize=5, label='Laser Distance')
 
-    if len(ultra_distance_array) > 10:  # if array size >10, pop the first index of all 3 arrays https://www.programiz.com/python-programming/methods/list/pop
-        ultra_distance_array.pop(0)
-        laser_distance_array.pop(0)
-        time_string_array.pop(0)
+    if len(ultra_distance_list) > 10:  # if array size >10, pop the first index of all 3 arrays https://www.programiz.com/python-programming/methods/list/pop
+        ultra_distance_list = ultra_distance_list[-10:]
+        laser_distance_list = laser_distance_list[-10:]
+        time_string_list = time_string_list[-10:]
 
     ax.set_title("Distance over Time")
     ax.set_xlabel("Time (HH:MM:SS)")
@@ -250,6 +264,27 @@ def plot_graph_update():
     ax.legend()
     canvas.draw()
     root.after(50, plot_graph_update)
+
+def laser_pointers_for_measurement():
+    global laser_pointers_status, laser_pointers_for_measurement_state
+    laser_pointers_for_measurement_state = not laser_pointers_for_measurement_state
+    if laser_pointers_for_measurement_state:
+        laser_pointers_status = "ON"
+        laser_pointers_for_measurement_state = True
+        laser_pointer_button.config(text="Laser pointers (ON)", foreground="green",)
+    if not laser_pointers_for_measurement_state:
+        laser_pointers_status = "OFF"
+        laser_pointers_for_measurement_state = False
+        laser_pointer_button.config(text="Laser pointers (OFF)", foreground="red")
+    write_to_arduino()
+
+
+def write_to_arduino():
+    global measuring_status, laser_pointers_status
+    data_to_send = measuring_status + ":" + laser_pointers_status + "\n"
+    arduinoData.write(data_to_send.encode())
+    print("Sent data:", data_to_send)
+
 
 # GUI Setup
 root = tk.Tk() #by Bro Code 22 Sept 2020 https://www.youtube.com/watch?v=lyoyTlltFVU&ab_channel=BroCode
@@ -281,11 +316,14 @@ close_button.pack(pady=3)
 status_label = ttk.Label(root, text="Connection: Not Established", foreground="red")
 status_label.pack(pady=3)
 
+laser_pointer_button = tk.Button(root, text="Laser pointers (OFF)", command=laser_pointers_for_measurement, foreground="red", bg="white",  relief="flat", state=tk.DISABLED)
+laser_pointer_button.pack(pady=3)
+
 # Start/Stop buttons
 start_button = ttk.Button(root, text="Start Measuring", command=start_measuring, state=tk.DISABLED)
 start_button.pack(pady=3)
 
-stop_button = ttk.Button(root, text="Stop Measuring", command=stop_measuring, state=tk.DISABLED)
+stop_button = ttk.Button(root, text="Stop Measuring", command=stop_measuring,state=tk.DISABLED)
 stop_button.pack(pady=3)
 sensor = tk.Frame(root)
 sensor.pack(pady=10)
@@ -354,9 +392,9 @@ canvas = FigureCanvasTkAgg(fig, master=root)
 canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=1)
 canvas.draw()
 
-
-clock_update()
+#clock_update()
 
 plot_graph_update()
 # Start the Tkinter event loop
+
 root.mainloop()

@@ -90,8 +90,8 @@ void RS485_Send(const char *buf, uint16_t size) {
   RS485_SetRX();                        // Switch back to receive mode
 }
 
-const char *ssid = "ipad";
-const char *password = "ily666777";
+const char *ssid = "";
+const char *password = "";
 
 unsigned long currentMillis = 0;
 

@@ -127,6 +127,7 @@ def read_sensor_data():
 
                         # Update Gyro Sensor Data
                         update_gyro_label(gyro)  # Update the gyro value separately
+                        plot_graph_update()
 
         except serial.SerialException as e:
             print(f"Error with serial connection: {e}")
@@ -263,7 +264,7 @@ def plot_graph_update():
     ax.set_ylabel("Distance (mm)")
     ax.legend()
     canvas.draw()
-    root.after(50, plot_graph_update)
+    #root.after(50, plot_graph_update)
 
 def laser_pointers_for_measurement():
     global laser_pointers_status, laser_pointers_for_measurement_state
@@ -394,7 +395,7 @@ canvas.draw()
 
 #clock_update()
 
-plot_graph_update()
+#plot_graph_update()
 # Start the Tkinter event loop
 
-root.mainloop()
+root.mainloop()`

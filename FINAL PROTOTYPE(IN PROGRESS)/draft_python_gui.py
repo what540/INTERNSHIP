@@ -47,6 +47,8 @@ confidence_level = 0.95
 
 array_for_arduino_to_decode = []
 
+battery_lvl = 0
+
 
 # Serial Connections
 def get_available_ports():
@@ -74,8 +76,7 @@ def on_select():
     refresh_button.config(state=tk.DISABLED)
 
     # update the status to "Established"
-    root.after(1000, update_gui_status)
-
+    root.after(2000, update_gui_status)
 
 def refresh_ports():
     """Refresh the list of available serial ports and update the combobox."""
@@ -116,7 +117,6 @@ def start_measuring():
         write_to_arduino()
     update_start_measurement_ui()
 
-
 def stop_measuring():
     """Stop measuring for both sensors."""
     global measuring, arduinoData, measuring_status
@@ -125,13 +125,14 @@ def stop_measuring():
     measuring_status = "0"
     write_to_arduino()
     sd_value.config(text="-")
+    battery_value.config(text="-")
     update_stop_measurement_ui()
 
 def read_sensor_data():
     global measuring, arduinoData, connection, time_string
     global ultra_distance, diff_ultra_distance, prev_ultra_distance, range_interval_ultra_distance, ultra_distance_stddev
     global laser_distance, diff_laser_distance, prev_laser_distance, range_interval_laser_distance, laser_distance_stddev
-    global sd_present, gyro, time_from_arduino, numReadingsPerSecond, confidence_level
+    global sd_present, gyro, time_from_arduino, numReadingsPerSecond, confidence_level,battery_lvl
     if connection and arduinoData:
         try:
             while measuring:
@@ -146,24 +147,29 @@ def read_sensor_data():
                         print(data)"""
 
                     numReadingsPerSecond = "25"
+                    readings_analysis_val.config(text=numReadingsPerSecond)
 
-                    if len(data[1:]) == int(numReadingsPerSecond)*2 +3:
+                    if len(data[1:]) == int(numReadingsPerSecond)*2 +4:
                         print(data)
-                        ultra_list = [float(value) for value in data[:int(numReadingsPerSecond)]]
+                        ultra_list = [float(value) for value in data[1:int(numReadingsPerSecond)]]
                         laser_list = [float(value) for value in
                                       data[int(numReadingsPerSecond):int(numReadingsPerSecond) * 2]]
 
-                        alpha = 1 - confidence_level
-                        df = int(numReadingsPerSecond) - 1  # Degrees of freedom
+                        alpha = 1 - confidence_level  # Calculate alpha (significance level)
 
-                        t_critical = st.t.ppf(1 - alpha / 2,
-                                              df)  # Two-tailed t-critical value https://www.geeksforgeeks.org/how-to-find-the-t-critical-value-in-python/
+                        df_ultra = len(ultra_list) - 1  # Degrees of freedom
+                        t_critical_ultra = st.t.ppf(1 - alpha / 2,
+                                              df_ultra)  # Two-tailed t-critical value https://www.geeksforgeeks.org/how-to-find-the-t-critical-value-in-python/
+
+                        df_laser = len(laser_list) - 1  # Degrees of freedom
+                        t_critical_laser = st.t.ppf(1 - alpha/ 2,
+                                              df_laser)  # Two-tailed t-critical value https://www.geeksforgeeks.org/how-to-find-the-t-critical-value-in-python/
 
                         ultra_distance_before = round(np.mean(ultra_list), 4)  # mean before
                         range_interval_ultra_distance = round(max(ultra_list) - min(ultra_list), 4)
-                        ultra_distance_stddev = round(np.std(ultra_list), 4)
+                        ultra_distance_stddev = round(np.std(ultra_list,ddof=1), 4)
 
-                        ultra_ci_ebm = t_critical * (ultra_distance_stddev / np.sqrt(int(numReadingsPerSecond)))
+                        ultra_ci_ebm = t_critical_ultra * (ultra_distance_stddev / np.sqrt(len(ultra_list)))
                         ultra_lower_ci = ultra_distance - ultra_ci_ebm
                         ultra_upper_ci = ultra_distance + ultra_ci_ebm
                         ultra_ci_ebm = round(ultra_ci_ebm, 4)
@@ -174,12 +180,11 @@ def read_sensor_data():
                         ultra_ci_val.config(text=f"({ultra_lower_ci}, {ultra_upper_ci})")
                         ultra_ci_margin_error_val.config(text=ultra_ci_ebm)
                         ultrasonic_stddev_val.config(text=f"{ultra_distance_stddev}")
-
                         laser_distance_before = round(np.mean(laser_list), 3)
                         range_interval_laser_distance = round(max(laser_list) - min(laser_list), 2)
-                        laser_distance_stddev = round(np.std(laser_list), 4)
+                        laser_distance_stddev = round(np.std(laser_list,ddof=1), 4)
 
-                        laser_ci_ebm = t_critical * (laser_distance_stddev / np.sqrt(int(numReadingsPerSecond)))
+                        laser_ci_ebm = t_critical_laser * (laser_distance_stddev / np.sqrt(len(laser_list)))
                         laser_lower_ci = laser_distance - laser_ci_ebm
                         laser_upper_ci = laser_distance + laser_ci_ebm
                         laser_ci_ebm = round(laser_ci_ebm, 4)
@@ -194,11 +199,19 @@ def read_sensor_data():
                         ultra_list_filtered = remove_outliers(ultra_list)  # filter outliers with IQR
                         laser_list_filtered = remove_outliers(laser_list)
 
+                        df_ultra = len(ultra_list_filtered) - 1  # Degrees of freedom
+                        t_critical_ultra = st.t.ppf(1 - alpha / 2,
+                                                    df_ultra)  # Two-tailed t-critical value https://www.geeksforgeeks.org/how-to-find-the-t-critical-value-in-python/
+
+                        df_laser = len(laser_list_filtered) - 1  # Degrees of freedom
+                        t_critical_laser = st.t.ppf(1 - alpha / 2,
+                                                    df_laser)  # Two-tailed t-critical value https://www.geeksforgeeks.org/how-to-find-the-t-critical-value-in-python/
+
                         ultra_distance = round(np.mean(ultra_list_filtered), 4)  # mean after
                         range_interval_ultra_distance = round(max(ultra_list_filtered) - min(ultra_list_filtered), 3)
-                        ultra_distance_stddev = round(np.std(ultra_list_filtered), 4)
+                        ultra_distance_stddev = round(np.std(ultra_list_filtered,ddof=1), 4)
 
-                        ultra_ci_ebm = t_critical * (ultra_distance_stddev / np.sqrt(int(numReadingsPerSecond)))
+                        ultra_ci_ebm = t_critical_ultra * (ultra_distance_stddev / np.sqrt(len(ultra_list_filtered)))
                         ultra_lower_ci = ultra_distance - ultra_ci_ebm
                         ultra_upper_ci = ultra_distance + ultra_ci_ebm
                         ultra_ci_ebm = round(ultra_ci_ebm, 4)
@@ -217,9 +230,9 @@ def read_sensor_data():
 
                         laser_distance = round(np.mean(laser_list_filtered), 3)
                         range_interval_laser_distance = round(max(laser_list_filtered) - min(laser_list_filtered), 2)
-                        laser_distance_stddev = round(np.std(laser_list_filtered), 4)
+                        laser_distance_stddev = round(np.std(laser_list_filtered,ddof=1), 4)
 
-                        laser_ci_ebm = t_critical * (laser_distance_stddev / np.sqrt(int(numReadingsPerSecond)))
+                        laser_ci_ebm = t_critical_laser * (laser_distance_stddev / np.sqrt(len(laser_list_filtered)))
                         laser_lower_ci = laser_distance - laser_ci_ebm
                         laser_upper_ci = laser_distance + laser_ci_ebm
                         laser_ci_ebm = round(laser_ci_ebm, 4)
@@ -249,6 +262,12 @@ def read_sensor_data():
                         sd_present = str((data[(int(numReadingsPerSecond) * 2) + 3]))
                         sd_value.config(text=sd_present)
 
+                        battery_lvl = int(str((data[(int(numReadingsPerSecond) * 2) + 4])))
+                        if battery_lvl > 20:
+                            battery_value.config(text=f"{battery_lvl}", foreground="black")
+                        else:
+                            battery_value.config(text=f"{battery_lvl}", foreground="red")
+
                         ultrasonic_update_sensor_data(ultra_distance)
                         laser_update_sensor_data(laser_distance)
 
@@ -258,19 +277,16 @@ def read_sensor_data():
                         ultra_distance = int(ultra_distance)
                         laser_distance = int(laser_distance)
 
-
                         write_to_arduino()
 
                         ultra_list.clear()
                         laser_list.clear()
-
 
         except serial.SerialException as e:
             print(f"Error with serial connection: {e}")
             connection = False
         except Exception as e:
             print(f"Error reading sensor data: {e}")
-
 
 def remove_outliers(data):
     Q1 = np.percentile(data, 25)
@@ -284,7 +300,6 @@ def remove_outliers(data):
             x <= upper_bound)]  # https://medium.com/@nirajan.acharya777/understanding-outlier-removal-using-interquartile-range-iqr-b55b9726363e
     return filtered_data
 
-
 def ultrasonic_update_sensor_data(distance):
     status = "OK!"
     # Check for hogging/sagging status; used as 10cm original displacement between two objects for reference
@@ -295,7 +310,6 @@ def ultrasonic_update_sensor_data(distance):
     elif distance == 700:
         status = "OK!"
     ultrasonic_hogging_label_value.config(text=status)
-
 
 def laser_update_sensor_data(distance):
     status = "OK!"
@@ -308,7 +322,6 @@ def laser_update_sensor_data(distance):
         status = "OK!"
     laser_hogging_label_value.config(text=status)
 
-
 def update_start_measurement_ui():
     """Instantly update UI when starting measurement."""
     status_label.config(text="Measuring...", foreground="green")
@@ -316,14 +329,12 @@ def update_start_measurement_ui():
     stop_button.config(state=tk.NORMAL)
     close_button.config(state=tk.DISABLED)
 
-
 def update_stop_measurement_ui():
     """Update UI when stopping measurement."""
     status_label.config(text="Stop", foreground="red")
     start_button.config(state=tk.NORMAL)
     stop_button.config(state=tk.DISABLED)
     close_button.config(state=tk.NORMAL)
-
 
 def close_serial():
     """Close the serial connection."""
@@ -411,10 +422,7 @@ def laser_pointers_for_measurement():
     write_to_arduino()
 
 def write_to_arduino():
-    global measuring_status, laser_pointers_status, ultra_distance,time_from_arduino,laser_distance,gyro
-    #data_to_send = measuring_status + ":" + laser_pointers_status +  "\n"
-    date_string = strftime("%m/%d/%Y")
-
+    global measuring_status, laser_pointers_status, ultra_distance,laser_distance
     data_to_send = measuring_status + laser_pointers_status + ":" +  str(
         ultra_distance) + ";" + str(
         laser_distance) + "\n"
@@ -422,7 +430,6 @@ def write_to_arduino():
     arduinoData.flush()
 
     print("Sent data:", data_to_send)
-
 
 # GUI Setup
 root = tk.Tk()  # by Bro Code 22 Sept 2020 https://www.youtube.com/watch?v=lyoyTlltFVU&ab_channel=BroCode
@@ -467,15 +474,24 @@ stop_button.grid(row=0, column=1, padx=5)
 
 sd = tk.Frame(root)
 sd.pack()
+
 # LabelFrame for SD card details
 sd_frame = tk.LabelFrame(sd, text="SD Card", padx=5, pady=5)
-sd_frame.pack()
+sd_frame.grid(row=0, column=1)  # Position SD card frame to the right (column 1)
 # Label for "Saving Data?" text
 sd_label = tk.Label(sd_frame, text="Saving Data?:", font=("Arial", 9))
 sd_label.pack()
-# Label to display the value of sd_present
 sd_value = tk.Label(sd_frame, text=sd_present, font=("Arial", 9))
 sd_value.pack()
+
+# LabelFrame for Battery details
+battery_frame = tk.LabelFrame(sd, text="Battery", padx=5, pady=5)
+battery_frame.grid(row=0, column=0)  # Position battery frame to the left (column 0)
+# Label for "Battery Voltage" text
+battery_label = tk.Label(battery_frame, text="Battery(%):", font=("Arial", 9))
+battery_label.pack()
+battery_value = tk.Label(battery_frame, text="-", font=("Arial", 9))
+battery_value.pack()
 
 analysis = tk.Frame(root)
 analysis.pack()

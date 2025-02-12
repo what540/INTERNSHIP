@@ -107,11 +107,9 @@ void setup() {
   Serial.println("Initializing");
   checkSDCard();
   WiFi.begin(ssid, password);
-  delay(1000);
+  delay(5000);
   if (!rtc.begin()) {
     Serial.println("Couldn't find RTC");
-    Serial.flush();
-    //while (1) delay(10);tt
   } else {
     Serial.println("rtc ok");
   };
@@ -174,23 +172,60 @@ void setup() {
   digitalWrite(LED_pin, LOW);
   digitalWrite(LED_pin1, LOW);
 
-  analogReadResolution(12);
-
-  // Set the ADC reference voltage to 1.1V
-  analogSetAttenuation(ADC_0db);  // If you want the full 1.1V range
+  analogReadResolution(12);       // Set ADC resolution to 12-bit (0-4095)
+  analogSetAttenuation(ADC_0db);  // Set ADC range to 0-1.1V
 }
 
 bool measuring_status = false;
 bool laser_pointers_status = false;
 
-String measuring_command = "STOP";
-String laser_pointers_command = "OFF";
+String measuring_command = "00";
+String prev_measuring_command = "";
+
+String laser_pointers_command = "";
 
 String sdCardPresent_status = "No";
 
 String time_for_all = "";
 
 float battery = 0;
+
+double getAverageVoltage(int pin, int ReadingsForBatteryVolt) {
+  double sum = 0;
+  for (int i = 0; i < ReadingsForBatteryVolt; i++) {
+    int adcValue = analogRead(pin);                    // Read ADC value (0-4095)
+    float voltage = ((float)adcValue / 4095.0) * 1.1;  // Convert ADC value to voltage
+    sum += voltage;
+  }
+  double avgReading = sum / (double)ReadingsForBatteryVolt;
+  return avgReading;
+}
+// Convert ADC reading to actual voltage
+/*double convertToVoltage(double reading) {
+  if (reading < 1 || reading >= 4095) return 0;  // Ignore extreme values
+  return -0.000000000000016 * pow(reading, 4) + 0.000000000118171 * pow(reading, 3) - 0.000000301211691 * pow(reading, 2) + 0.001109019271794 * reading + 0.034143524634089;
+}*/
+// Convert voltage to battery percentage
+int mapBatteryPercentage(double voltage) {
+  int percent = (int)(((voltage - 0.6885245902) / (1.032786885 - 0.6885245902)) * 100);
+  if (percent > 100) percent = 100;  // Clamp max to 100%
+  if (percent < 0) percent = 0;      // Clamp min to 0%
+  return percent;
+}
+double avgVoltage = 0;
+int batteryPercent = 0;
+
+String printCleanString(String data) {
+
+
+  String cleaned = "";  // Store the cleaned string
+  for (int i = 0; i < data.length(); i++) {
+    if (isPrintable(data[i])) {  // Use custom function
+      cleaned += data[i];        // Append only printable characters
+    }
+  }
+  return cleaned;  // Return the cleaned string
+}
 
 void loop() {
   currentMillis = millis();
@@ -200,7 +235,7 @@ void loop() {
   //battery = (float)analogRead(36) / 4096 * 10.5 /*max bat voltage*/ * (100833 / 100000);
   //battery = (float) analogRead(36) / 4096 * 10.5 /*max bat voltage*/ * (100833/99000);
   //battery = (float) analogRead(36) / 4096 * 10.5 /*max bat voltage*/ * (98862.5);
-  int adcValue = analogRead(36);
+  //int adcValue = analogRead(36);
 
   // Convert ADC value to voltage using 1.1V reference voltage
   /* battery = (adcValue / 4095.0) * 1.1;
@@ -208,6 +243,11 @@ void loop() {
   Serial.println(adcValue);
   Serial.print("Battery voltage");
   Serial.println(battery);*/
+
+  avgVoltage = getAverageVoltage(36, 100);  // Get averaged voltage from 100 readings
+  batteryPercent = mapBatteryPercentage(avgVoltage);
+
+  Serial.println(avgVoltage);
 
   if ((measuring_status)) {
     if (currentMillis - previousMillisForRS485connection > intervalForRS485connection) {
@@ -218,23 +258,13 @@ void loop() {
   if (Serial2.available() > 3) {
     int availableBytes = Serial2.available();
     Serial.println(availableBytes);
-    /*String receivedData = Serial2.readStringUntil('\n');
-    Serial.print("receivedData: ");
-
-    Serial.println(receivedData);/*
-
-    /*   measuring_command = Serial2.readStringUntil(':');  //https://youtu.be/VdSFwYrYqW0?si=4_7ddYQORFcv9GpS
-    laser_pointers_command = Serial2.readStringUntil(':');
-
-    String ultradist_from_python = Serial2.readStringUntil('?');
-    String laserdist_from_python = Serial2.readStringUntil('\n');*/
-
-    measuring_command = Serial2.readStringUntil(':');
+    measuring_command = Serial2.readStringUntil(':');  //https://youtu.be/VdSFwYrYqW0?si=4_7ddYQORFcv9GpS
+    measuring_command = printCleanString(measuring_command);
 
     String ultradist_from_python = Serial2.readStringUntil(';');
     String laserdist_from_python = Serial2.readStringUntil('\n');
+    // laserdist_from_python = printCleanString(laserdist_from_python);
 
-    laser_pointers_command.trim();
     measuring_command.trim();
 
     ultradist_from_python.trim();
@@ -245,12 +275,15 @@ void loop() {
     Serial.print(ultradist_from_python);
     Serial.print(",");
     Serial.println(laserdist_from_python);
+    dataMessage = padLeft(time_for_all, 19) + ", " + padLeft(ultradist_from_python, 10) + ", " + padLeft(laserdist_from_python, 10) + ", " + padLeft(String(gyro), 7) + "\n";
 
-    dataMessage = padLeft(String(time_for_all), 19) + ", " + padLeft(String(ultradist_from_python, 3), 10) + ", " + padLeft(String(laserdist_from_python, 2), 10) + ", " + padLeft(String(gyro), 7) + "\n";
-    if (sdCardPresent) {
-      //Serial.println("SD card is available!");
-      appendFile(SD, "/data.txt", dataMessage.c_str());  //by Engr Fahad 21 Feb 2021 https://youtu.be/fPvW-dtB6i0?si=oah1L_oaQmai2ylV
+    if (measuring_command == prev_measuring_command) {
+      if (sdCardPresent) {
+        //Serial.println("SD card is available!");
+        appendFile(SD, "/data.txt", dataMessage.c_str());  //by Engr Fahad 21 Feb 2021 https://youtu.be/fPvW-dtB6i0?si=oah1L_oaQmai2ylV
+      }
     }
+    prev_measuring_command = measuring_command;
 
     previousMillisForRS485connection = millis();
   }
@@ -319,41 +352,31 @@ void loop() {
     Serial.printf(" %.3f\n", ultrasonicDistance);*/
       currentIndex++;
       if (currentIndex >= numReadings) {
-        if (currentMillis - previousMillis >= interval) {
-          String msg = String(numReadings) + ",";
-          for (int i = 0; i < numReadings; i++) {
-            msg += String(ultraReadings[i]) + ",";
-            ultraReadings[i] = 0;
-          }
-          for (int i = 0; i < numReadings; i++) {
-            msg += String(laserReadings[i]) + ",";
-            laserReadings[i] = 0;
-          }
-          time_for_all = printLocalTime_timeOnly();
-          msg += String(gyro) + "," + time_for_all + "," + sdCardPresent_status + "\n";
+        //if (currentMillis - previousMillis >= interval) {
+        String msg = String(numReadings) + ",";
+        for (int i = 0; i < numReadings; i++) {
+          msg += String(ultraReadings[i]) + ",";
+          ultraReadings[i] = 0;
+        }
+        for (int i = 0; i < numReadings; i++) {
+          msg += String(laserReadings[i]) + ",";
+          laserReadings[i] = 0;
+        }
+        time_for_all = printLocalTime_timeOnly();
+        msg += String(gyro) + "," + time_for_all + "," + sdCardPresent_status + "," + String(batteryPercent) + "\n";
 
-          RS485_SetTX();
-          Serial2.flush();  // Wait until data is sent
-                            //Serial2.write(msg.c_str());
-          snprintf(tx_buffer, sizeof(tx_buffer),
-                   "%s\n", msg.c_str());
-          RS485_Send(tx_buffer, strlen(tx_buffer));
-          RS485_SetRX();  // Switch back to receive mode
+        RS485_SetTX();
+        Serial2.flush();
+        snprintf(tx_buffer, sizeof(tx_buffer),
+                 "%s\n", msg.c_str());
+        RS485_Send(tx_buffer, strlen(tx_buffer));
+        RS485_SetRX();  // Switch back to receive mode
 
-          for (int i = 0; i < numReadings; i++) {
-            ultrasonicDistanceSum += ultraReadings[i];
-            laserSum += laserReadings[i];
-          }
+        Serial.print(tx_buffer);
 
-          Serial.print(tx_buffer);
+        time_for_all = printLocalTime() + " " + time_for_all;
 
-          ultrasonicDistance = ultrasonicDistanceSum / numReadings;
-          laser = laserSum / numReadings;
-          time_for_all = printLocalTime() + " " + time_for_all;
-
-
-
-          /*display.setCursor(0, 0);
+        /*display.setCursor(0, 0);
           display.print(printLocalTime());
 
           display.setCursor(0, 10);
@@ -386,16 +409,16 @@ void loop() {
           display.display();
           display.clearDisplay();*/
 
-          // previousUltrasonic = ultrasonicDistance;  // Update previous values
-          // previousLaser = laser;
-          previousMillis = currentMillis;  // Reset timing
-        }
+        // previousUltrasonic = ultrasonicDistance;  // Update previous values
+        // previousLaser = laser;
+        //previousMillis = currentMillis;  // Reset timing
+        // }
         currentIndex = 0;
+        //}
+        ReadingPreviousMillis = currentMillis;
       }
-      ReadingPreviousMillis = currentMillis;
-    }
-  } else {
-    /* display.setCursor(0, 0);
+    } else {
+      /* display.setCursor(0, 0);
     display.print(printLocalTime());
 
     display.setCursor(0, 10);
@@ -408,12 +431,13 @@ void loop() {
     display.display();
     display.clearDisplay();*/
 
-    checkSDCard();
-    mpu.enableSleep(true);
+      checkSDCard();
+      mpu.enableSleep(true);
 
-    previousMillis = millis();
-    ReadingPreviousMillis = millis();
-    currentIndex = 0;
+      previousMillis = millis();
+      ReadingPreviousMillis = millis();
+      currentIndex = 0;
+    }
   }
 }
 
